@@ -128,7 +128,14 @@ export const contractors = pgTable('contractors', {
     nip: text('nip'), // Nullable for B2C (consumers)
 
     // Using simple text for address here, but structured is better if you validate it
-    address: text('address'),
+    addressData: jsonb('address_data').$type<{
+        street: string;
+        buildingNumber: string;
+        flatNumber?: string;
+        city: string;
+        postalCode: string;
+        countryCode: string;
+    }>().notNull(),
     email: text('email'),
 
     isVatPayer: boolean('is_vat_payer').default(true),
