@@ -1,86 +1,93 @@
 import * as crypto from 'crypto';
+import { env } from '@/env';
 
-// Zmienna globalna - przetrwa tak długo, jak żyje kontener (Warm Start)
+/**
+ * Global cached public key
+ * Persists as long as serverless function stays warm
+ */
 let globalCachedKey: string | null = null;
 
-// Typ dla odpowiedzi z endpointu /security/public-key-certificates
+/**
+ * Public key certificate from KSeF API
+ */
 interface PublicKeyCertificateDto {
-  certificate: string; // Base64 DER
+  certificate: string; // Base64 DER format
   validFrom: string;
   validTo: string;
-  usage: string[]; // np. ["KsefTokenEncryption", "SymmetricKeyEncryption"]
+  usage: string[]; // e.g. ["KsefTokenEncryption", "SymmetricKeyEncryption"]
 }
 
+/**
+ * Cryptographic utilities for KSeF API
+ * Handles token encryption with RSA-OAEP
+ */
 export class KsefCrypto {
-  private baseUrl = process.env.KSEF_BASE_URL as string;
+  private baseUrl = env.KSEF_BASE_URL;
 
   /**
-   * Pobiera klucz publiczny z API MF z uwzględnieniem cache'owania.
-   * Priorytety:
-   * 1. Pamięć RAM (globalCachedKey) - najszybciej (Warm Lambda)
-   * 2. Next.js Data Cache - szybko (Cold Lambda)
-   * 3. API MF - wolno (gdy cache wygaśnie)
+   * Fetches public key from KSeF API with caching strategy:
+   * 1. RAM cache (globalCachedKey) - fastest (warm serverless function)
+   * 2. Next.js Data Cache - fast (cold start)
+   * 3. KSeF API - slowest (when cache expires)
    */
   private async getPublicKey(): Promise<string> {
-    // 1. Sprawdź pamięć RAM (instancja kontenera)
+    // Check RAM cache first
     if (globalCachedKey) {
       return globalCachedKey;
     }
-
-    console.log('hz Pobieranie klucza publicznego (może być z cache Vercel)...');
     
     const url = `${this.baseUrl}/security/public-key-certificates`;
     
-    // 2. Fetch z rewalidacją (Next.js Data Cache)
-    // Cache'ujemy klucz na 24h (86400 sekund). Klucze MF zmieniają się rzadko.
+    // Fetch with Next.js caching (24 hours)
     const res = await fetch(url, { 
       method: 'GET',
       headers: { 'Accept': 'application/json' },
-      next: { revalidate: 86400 }
+      next: { revalidate: 86400 } // 24 hours - keys change rarely
     });
 
     if (!res.ok) {
-      throw new Error(`Nie udało się pobrać kluczy KSeF: ${res.status}`);
+      throw new Error(`Failed to fetch KSeF public keys: ${res.status}`);
     }
 
     const certs = await res.json() as PublicKeyCertificateDto[];
 
-    // Szukamy klucza do szyfrowania tokena (KsefTokenEncryption)
-    // Czasami ten sam klucz ma obie role, ale szukamy konkretnie tej.
+    // Find certificate for token encryption
     const authCert = certs.find(c => c.usage.includes('KsefTokenEncryption'));
 
     if (!authCert) {
-      throw new Error('Nie znaleziono certyfikatu o przeznaczeniu KsefTokenEncryption');
+      throw new Error('KsefTokenEncryption certificate not found');
     }
 
-    // Formatowanie do PEM
+    // Format to PEM
     const pem = this.formatToPem(authCert.certificate);
     
-    // Zapisz do zmiennej globalnej na przyszłość (dla tego samego kontenera)
+    // Cache in RAM for future calls
     globalCachedKey = pem;
     
     return pem;
   }
 
   /**
-   * Pomocnicza funkcja formatująca czysty Base64 do formatu PEM.
+   * Formats base64 certificate to PEM format
    */
   private formatToPem(base64Cert: string): string {
-    // Node.js crypto zazwyczaj radzi sobie z jedną linią w bloku BEGIN/END,
-    // ale dobrą praktyką jest standardowy format.
     return `-----BEGIN CERTIFICATE-----\n${base64Cert}\n-----END CERTIFICATE-----`;
   }
 
   /**
-   * Szyfruje token algorytmem RSA-OAEP z SHA-256
+   * Encrypts token using RSA-OAEP with SHA-256
+   * 
+   * @param apiToken - KSeF authorization token
+   * @param challengeTimestamp - Challenge timestamp from KSeF
+   * @returns Base64 encoded encrypted token
    */
   public async encryptToken(apiToken: string, challengeTimestamp: string): Promise<string> {
     const publicKey = await this.getPublicKey();
     
-    // Timestamp musi być w milisekundach (API v2)
+    // Convert timestamp to milliseconds (API v2 requirement)
     const timestampMs = new Date(challengeTimestamp).getTime();
     
-    // Format "token|timestamp"
+    // Format: "token|timestamp"
     const message = `${apiToken}|${timestampMs}`;
     const buffer = Buffer.from(message, 'utf8');
 

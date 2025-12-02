@@ -1,5 +1,5 @@
-import { env } from '@/env';
 import { KsefCrypto } from './crypto';
+import { env } from '@/env';
 import type { 
   AuthChallengeResponse, 
   AuthKsefTokenRequest, 
@@ -8,15 +8,24 @@ import type {
   AuthTokenResponse 
 } from './types';
 
+/**
+ * KSeF API Client
+ * Handles communication with Polish National e-Invoice System (KSeF)
+ * 
+ * @see https://www.gov.pl/web/kas/ksef
+ */
 export class KsefClient {
-  // UWAGA: Base URL dla środowiska TESTOWEGO z API v2
-  private baseUrl = process.env.KSEF_BASE_URL as string;
+  /** Base URL for KSeF API (test/production environment) */
+  private baseUrl = env.KSEF_BASE_URL;
   private crypto: KsefCrypto;
 
   constructor() {
     this.crypto = new KsefCrypto();
   }
 
+  /**
+   * Makes authenticated request to KSeF API
+   */
   private async fetchJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const headers = {
@@ -25,34 +34,38 @@ export class KsefClient {
       ...options.headers,
     };
 
-    console.log(`📡 [KSeF] ${options.method || 'GET'} ${endpoint}`);
     const res = await fetch(url, { ...options, headers });
 
     if (!res.ok) {
       const errorText = await res.text();
-      console.error(`❌ [KSeF Error] ${res.status}:`, errorText);
-      throw new Error(`KSeF Request Failed: ${res.status} ${errorText}`);
+      console.error(`[KSeF] ${options.method || 'GET'} ${endpoint} failed: ${res.status}`, errorText);
+      throw new Error(`KSeF Request Failed: ${res.status}`);
     }
 
     return res.json() as Promise<T>;
   }
 
+  /**
+   * Performs full KSeF login flow
+   * Steps: Challenge -> Encrypt -> Auth Request -> Poll -> Redeem Token
+   * 
+   * @param nip - Company NIP (tax identification number)
+   * @param ksefToken - KSeF authorization token
+   * @returns Access token and session details
+   */
   public async login(nip: string, ksefToken: string): Promise<AuthTokenResponse> {
-    console.log('🚀 Rozpoczynam logowanie (API v2)...');
-
-    // 1. Challenge
+    // Step 1: Get challenge from KSeF
     const challengeRes = await this.fetchJson<AuthChallengeResponse>('/auth/challenge', { method: 'POST' });
-    console.log('✅ Challenge:', challengeRes.challenge);
     
-    // API v2 wymaga timestampu w milisekundach
+    // Step 2: Encrypt token with public key and challenge
     const encryptedToken = await this.crypto.encryptToken(ksefToken, challengeRes.timestamp);
 
-    // 3. Auth Request (Struktura zgodna z Twoją dokumentacją)
+    // Step 3: Send auth request
     const authBody: AuthKsefTokenRequest = {
       challenge: challengeRes.challenge,
       contextIdentifier: {
-        type: 'Nip',   // Dokumentacja: "type": "Nip"
-        value: nip     // Dokumentacja: "value": "5265877635"
+        type: 'Nip',
+        value: nip
       },
       encryptedToken: encryptedToken
     };
@@ -61,13 +74,11 @@ export class KsefClient {
       method: 'POST',
       body: JSON.stringify(authBody)
     });
-    console.log('✅ Auth Request wysłany. Ref:', signatureRes.referenceNumber);
 
-    // 4. Polling (Czekamy na status 200)
+    // Step 4: Poll until authorization is complete
     await this.waitForAuthCompletion(signatureRes.referenceNumber, signatureRes.authenticationToken.token);
 
-    // 5. Redeem (Odbiór JWT)
-    // Dokumentacja nie pokazuje body w redeem, tylko nagłówek Authorization
+    // Step 5: Redeem final access token
     const tokens = await this.fetchJson<AuthTokenResponse>('/auth/token/redeem', {
       method: 'POST',
       headers: {
@@ -75,15 +86,19 @@ export class KsefClient {
       }
     });
 
-    console.log('🎉 ZALOGOWANO! Token wygasa:', tokens.accessToken.validUntil);
     return tokens;
   }
 
+  /**
+   * Polls KSeF until authorization is complete
+   * Waits up to 30 seconds (15 retries * 2 seconds)
+   */
   private async waitForAuthCompletion(refNumber: string, tempToken: string): Promise<void> {
     const maxRetries = 15;
+    const retryDelay = 2000; // 2 seconds
     
     for (let i = 0; i < maxRetries; i++) {
-      await new Promise(r => setTimeout(r, 2000)); // Czekaj 2s
+      await new Promise(resolve => setTimeout(resolve, retryDelay));
 
       const res = await this.fetchJson<AuthStatusResponse>(`/auth/${refNumber}`, {
         method: 'GET',
@@ -91,11 +106,13 @@ export class KsefClient {
       });
 
       const code = res.status.code;
-      console.log(`⏳ Status: ${code} - ${res.status.description}`);
 
-      if (code === 200) return; // Sukces
-      if (code >= 400) throw new Error(`Błąd autoryzacji: ${res.status.description}`);
+      if (code === 200) return; // Success
+      if (code >= 400) {
+        throw new Error(`KSeF authorization failed: ${res.status.description}`);
+      }
     }
-    throw new Error('Timeout logowania');
+    
+    throw new Error('KSeF authorization timeout');
   }
 }

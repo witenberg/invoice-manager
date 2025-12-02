@@ -272,6 +272,37 @@ export const invoiceItems = pgTable('invoice_items', {
     gtuCode: text('gtu_code'),
 });
 
+/**
+ * Company Invitations
+ * Invitations to the company.
+ */
+export const companyInvitations = pgTable('company_invitations', {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    companyId: integer('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    
+    // Email of the person being invited (important for security)
+    email: text('email').notNull(),
+    
+    // Role, which the person will receive after acceptance
+    role: text('role', { enum: ['ACCOUNTANT', 'EMPLOYEE', 'OWNER'] }).notNull(),
+    
+    // Verification token (unique URL)
+    token: text('token').notNull().unique(),
+    
+    // Expiration date of the invitation (e.g. 7 days)
+    expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
+    
+    // Status (pending, accepted)
+    status: text('status', { enum: ['PENDING', 'ACCEPTED'] }).default('PENDING').notNull(),
+    
+    invitedBy: text('invited_by').notNull().references(() => users.id),
+    createdAt: timestamp('created_at').defaultNow(),
+  }, (t) => [
+    index('invitation_token_idx').on(t.token),
+    index('invitation_email_idx').on(t.email)
+  ]);
+  
+
 // =========================================================
 // SECTION 4: RELATIONS
 // =========================================================
@@ -317,3 +348,8 @@ export const invoicesRelations = relations(invoices, ({ one, many }) => ({
 export const invoiceItemsRelations = relations(invoiceItems, ({ one }) => ({
     invoice: one(invoices, { fields: [invoiceItems.invoiceId], references: [invoices.id] }),
 }));
+
+export const companyInvitationsRelations = relations(companyInvitations, ({ one }) => ({
+    company: one(companies, { fields: [companyInvitations.companyId], references: [companies.id] }),
+    sender: one(users, { fields: [companyInvitations.invitedBy], references: [users.id] }),
+  }));

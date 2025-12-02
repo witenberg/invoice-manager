@@ -15,6 +15,13 @@
       "when": 1764687130139,
       "tag": "0001_brave_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1764706213659,
+      "tag": "0002_sudden_jigsaw",
+      "breakpoints": true
     }
   ]
 }
