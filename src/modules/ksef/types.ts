@@ -8,8 +8,8 @@ export interface AuthChallengeResponse {
   export interface AuthKsefTokenRequest {
     challenge: string;
     contextIdentifier: {
-      type: 'Nip';    // Wielka litera!
-      value: string;  // 'value', nie 'identifier'!
+      type: 'Nip';   
+      value: string;
     };
     encryptedToken: string;
   }
@@ -40,4 +40,5 @@ export interface AuthChallengeResponse {
       token: string;
       validUntil: string;
     };
+    referenceNumber: string;
   }

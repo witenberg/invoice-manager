@@ -9,7 +9,8 @@ import {
     integer,
     jsonb,
     index,
-    unique
+    unique,
+    varchar
 } from 'drizzle-orm/pg-core';
 import { relations, sql } from 'drizzle-orm';
 import type { AdapterAccount } from 'next-auth/adapters';
@@ -87,33 +88,59 @@ export const verificationTokens = pgTable(
  */
 export const companies = pgTable('companies', {
     id: serial('id').primaryKey(),
-    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    // userId - relacja będzie przez tabelę company_members
 
     name: text('name').notNull(),
-    nip: text('nip').notNull(), // Tax Identification Number (Crucial for KSeF)
+    nip: varchar('nip', { length: 10 }).notNull(), // NIP ma zawsze 10 znaków
 
-    // Structured address is preferred for XML generation, but using JSONB for flexibility
-    // Expected keys: street, buildingNumber, city, postalCode, countryCode
     addressData: jsonb('address_data').$type<{
         street: string;
         buildingNumber: string;
-        flatNumber?: string;
         city: string;
         postalCode: string;
         countryCode: string;
     }>().notNull(),
 
-    bankAccount: text('bank_account'),
-    bankName: text('bank_name'),
-
-    // Production or Demo environment token for KSeF
-    ksefAuthToken: text('ksef_auth_token'),
-
     createdAt: timestamp('created_at').defaultNow(),
 }, (t) => [
-    // Ensure one NIP isn't added twice by the same user to avoid duplicates
-    unique().on(t.userId, t.nip)
+    unique().on(t.nip) // NIP musi być unikalny w systemie
 ]);
+
+/**
+  * User <-> Company relationship
+  *  Allows multiple people to manage one company with different roles.
+ */
+export const companyMembers = pgTable('company_members', {
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    companyId: integer('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
+    role: text('role', { enum: ['OWNER', 'ACCOUNTANT', 'EMPLOYEE'] }).default('EMPLOYEE').notNull(),
+}, (t) => [
+    primaryKey({ columns: [t.userId, t.companyId] })
+]);
+
+/**
+ * KSeF Credentials
+ * Separates token storage from company data to allow future encryption.
+ */
+export const ksefCredentials = pgTable('ksef_credentials', {
+    companyId: integer('company_id').primaryKey().references(() => companies.id, { onDelete: 'cascade' }),
+    
+    // Environment: 'test' (Demo) lub 'prod' (Produkcja)
+    environment: text('environment', { enum: ['test', 'prod'] }).default('test').notNull(),
+
+    // Długoterminowy token autoryzacyjny (ten generowany raz)
+    // UWAGA: W produkcji to pole powinno być szyfrowane w aplikacji przed zapisem!
+    authorizationToken: text('authorization_token'), 
+
+    // Krótkożyjący token sesyjny (Bearer) uzyskany po zalogowaniu
+    sessionToken: text('session_token'),
+    
+    // Data ważności tokena sesyjnego. Jeśli minęła, aplikacja musi użyć authorizationToken by pobrać nowy sessionToken
+    sessionValidUntil: timestamp('session_valid_until', { mode: 'date' }),
+
+    // Numer referencyjny ostatniej sesji (przydatne do logów)
+    lastSessionReferenceNumber: text('last_session_reference_number'),
+});
 
 /**
  * CONTRACTORS (The Buyer)
@@ -250,8 +277,7 @@ export const invoiceItems = pgTable('invoice_items', {
 // =========================================================
 
 export const usersRelations = relations(users, ({ many }) => ({
-    accounts: many(accounts),
-    companies: many(companies), // User has many companies
+    companyMemberships: many(companyMembers),
 }));
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -262,10 +288,19 @@ export const sessionsRelations = relations(sessions, ({ one }) => ({
     user: one(users, { fields: [sessions.userId], references: [users.id] }),
 }));
 
-export const companiesRelations = relations(companies, ({ one, many }) => ({
-    user: one(users, { fields: [companies.userId], references: [users.id] }),
+export const companiesRelations = relations(companies, ({ many, one }) => ({
+    members: many(companyMembers),
+    ksefCredentials: one(ksefCredentials, {
+        fields: [companies.id],
+        references: [ksefCredentials.companyId]
+    }),
     invoices: many(invoices),
     contractors: many(contractors),
+}));
+
+export const companyMembersRelations = relations(companyMembers, ({ one }) => ({
+    user: one(users, { fields: [companyMembers.userId], references: [users.id] }),
+    company: one(companies, { fields: [companyMembers.companyId], references: [companies.id] }),
 }));
 
 export const contractorsRelations = relations(contractors, ({ one, many }) => ({
