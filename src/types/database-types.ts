@@ -39,3 +39,4 @@ export type UserWithCompanies = User & {
   companies: CompanyMember[];
 };
 
+
