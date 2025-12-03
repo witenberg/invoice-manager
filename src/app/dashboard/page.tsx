@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, FileText, Users } from "lucide-react";
 import Link from "next/link";
+import { SignOutButton } from "@/components/auth/sign-out-button";
 
 /**
  * Dashboard Page
@@ -28,7 +29,9 @@ export default async function DashboardPage() {
       <PageHeader
         title="Dashboard"
         description={`Witaj, ${session.user.name || "Użytkowniku"}!`}
-      />
+      >
+        <SignOutButton />
+      </PageHeader>
 
       {/* Quick Stats */}
       <div className="grid gap-4 md:grid-cols-3">
