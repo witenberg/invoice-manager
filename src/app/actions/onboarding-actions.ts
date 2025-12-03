@@ -68,7 +68,7 @@ const onboardingSchema = z.object({
     .min(1, "Token KSeF jest wymagany")
     .refine(
       isValidKsefToken,
-      "Token KSeF jest nieprawidłowy (powinien mieć minimum 30 znaków)"
+      "Token KSeF jest nieprawidłowy."
     ),
 })
 

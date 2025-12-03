@@ -25,9 +25,7 @@ export function isValidNip(nip: string): boolean {
   for (let i = 0; i < 9; i++) {
     sum += parseInt(cleanNip[i]) * weights[i];
   }
-  console.log('sum', sum);
-  console.log('cleanNip', cleanNip);
-  
+
   const checksum = sum % 11;
   const lastDigit = parseInt(cleanNip[9]);
 
@@ -83,7 +81,7 @@ export function isValidKsefToken(token: string): boolean {
   return (
     cleanToken.length >= 30 &&
     cleanToken.length <= 2000 &&
-    /^[A-Za-z0-9+/\-_=]+$/.test(cleanToken)
+    /^[A-Za-z0-9+/\-_=|]+$/.test(cleanToken)
   );
 }
 
