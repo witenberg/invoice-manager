@@ -77,25 +77,26 @@ export async function createCompanyAction(
     // Try to establish KSeF session (non-blocking)
     // If this fails, company is still created successfully
     try {
-      await service.testConnection(session.user.id, newCompany.id)
+      await service.testConnection(session.user.id, newCompany.id);
     } catch (ksefError) {
-      // Log but don't block user
-      console.error("KSeF connection warning:", getSafeErrorMessage(ksefError))
+      // Log warning but don't block user
+      if (process.env.NODE_ENV === "development") {
+        console.warn("KSeF connection warning:", getSafeErrorMessage(ksefError));
+      }
     }
 
     // Redirect to dashboard
-    redirect(`/dashboard/companies/${newCompany.id}`)
-    
+    redirect(`/dashboard/companies/${newCompany.id}`);
   } catch (error) {
     // Allow Next.js redirects to pass through
     if (isRedirectError(error)) {
-      throw error
+      throw error;
     }
 
     // Return safe error message to user
-    return { 
-      success: false, 
-      message: getSafeErrorMessage(error instanceof SafeError ? error : undefined) 
-    }
+    return {
+      success: false,
+      message: getSafeErrorMessage(error),
+    };
   }
 }

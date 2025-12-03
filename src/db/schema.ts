@@ -88,10 +88,10 @@ export const verificationTokens = pgTable(
  */
 export const companies = pgTable('companies', {
     id: serial('id').primaryKey(),
-    // userId - relacja będzie przez tabelę company_members
+    // User relationship is through company_members table (many-to-many)
 
     name: text('name').notNull(),
-    nip: varchar('nip', { length: 10 }).notNull(), // NIP ma zawsze 10 znaków
+    nip: varchar('nip', { length: 10 }).notNull(), // NIP always has 10 characters
 
     addressData: jsonb('address_data').$type<{
         street: string;
@@ -103,7 +103,7 @@ export const companies = pgTable('companies', {
 
     createdAt: timestamp('created_at').defaultNow(),
 }, (t) => [
-    unique().on(t.nip) // NIP musi być unikalny w systemie
+    unique().on(t.nip) // NIP must be unique in the system
 ]);
 
 /**
@@ -120,25 +120,25 @@ export const companyMembers = pgTable('company_members', {
 
 /**
  * KSeF Credentials
- * Separates token storage from company data to allow future encryption.
+ * Separates token storage from company data to allow encryption.
  */
 export const ksefCredentials = pgTable('ksef_credentials', {
     companyId: integer('company_id').primaryKey().references(() => companies.id, { onDelete: 'cascade' }),
     
-    // Environment: 'test' (Demo) lub 'prod' (Produkcja)
+    // Environment: 'test' (Demo) or 'prod' (Production)
     environment: text('environment', { enum: ['test', 'prod'] }).default('test').notNull(),
 
-    // Długoterminowy token autoryzacyjny (ten generowany raz)
-    // UWAGA: W produkcji to pole powinno być szyfrowane w aplikacji przed zapisem!
+    // Long-term authorization token (generated once)
+    // NOTE: This field is encrypted in the application layer before storage
     authorizationToken: text('authorization_token'), 
 
-    // Krótkożyjący token sesyjny (Bearer) uzyskany po zalogowaniu
+    // Short-lived session token (Bearer) obtained after login
     sessionToken: text('session_token'),
     
-    // Data ważności tokena sesyjnego. Jeśli minęła, aplikacja musi użyć authorizationToken by pobrać nowy sessionToken
+    // Session token expiration date. If expired, app must use authorizationToken to get new sessionToken
     sessionValidUntil: timestamp('session_valid_until', { mode: 'date' }),
 
-    // Numer referencyjny ostatniej sesji (przydatne do logów)
+    // Reference number of last session (useful for logs)
     lastSessionReferenceNumber: text('last_session_reference_number'),
 });
 
@@ -274,25 +274,25 @@ export const invoiceItems = pgTable('invoice_items', {
 
 /**
  * Company Invitations
- * Invitations to the company.
+ * Manages invitations for users to join companies
  */
 export const companyInvitations = pgTable('company_invitations', {
     id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
     companyId: integer('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
     
-    // Email of the person being invited (important for security)
+    // Email of the person being invited (used for security and matching)
     email: text('email').notNull(),
     
-    // Role, which the person will receive after acceptance
+    // Role that the person will receive after acceptance
     role: text('role', { enum: ['ACCOUNTANT', 'EMPLOYEE', 'OWNER'] }).notNull(),
     
-    // Verification token (unique URL)
+    // Verification token (generates unique URL)
     token: text('token').notNull().unique(),
     
-    // Expiration date of the invitation (e.g. 7 days)
+    // Expiration date of the invitation (typically 7 days)
     expiresAt: timestamp('expires_at', { mode: 'date' }).notNull(),
     
-    // Status (pending, accepted)
+    // Status (pending or accepted)
     status: text('status', { enum: ['PENDING', 'ACCEPTED'] }).default('PENDING').notNull(),
     
     invitedBy: text('invited_by').notNull().references(() => users.id),

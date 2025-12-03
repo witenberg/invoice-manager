@@ -1,12 +1,20 @@
-'use client'
+"use client";
 
 import { useState } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "../../../components/ui/card";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+  CardFooter,
+} from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
+import { Alert, AlertDescription } from "../../../components/ui/alert";
 import { acceptInvitationAction } from "../../../app/actions/invitation-actions";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import type { InvitationWithCompany } from "../../../modules/company/invitation-service";
 
 interface InviteViewProps {
@@ -15,23 +23,46 @@ interface InviteViewProps {
   userName?: string | null;
 }
 
-export function InviteView({ invitation, isAuthenticated, userName }: InviteViewProps) {
+/**
+ * Client component for invitation acceptance view
+ * Handles user interaction and displays invitation details
+ */
+export function InviteView({
+  invitation,
+  isAuthenticated,
+  userName,
+}: InviteViewProps) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /**
+   * Handles invitation acceptance
+   * Calls server action and handles errors
+   */
   const onAccept = async () => {
+    // Prevent double submission
+    if (isProcessing) {
+      return;
+    }
+
     setIsProcessing(true);
     setError(null);
-    
-    // Wywołanie Server Action
-    const result = await acceptInvitationAction(invitation.token);
-    
-    // Jeśli akcja zwróciła obiekt (tzn. że nie było redirectu = błąd)
-    if (result?.error) {
+
+    try {
+      // Call server action
+      const result = await acceptInvitationAction(invitation.token);
+
+      // If action returned an object (no redirect = error occurred)
+      if (result?.error) {
         setError(result.error);
         setIsProcessing(false);
+      }
+      // If redirect occurred, React will unmount this component
+    } catch (err) {
+      // Catch any unexpected errors
+      setError("Wystąpił nieoczekiwany błąd. Spróbuj ponownie.");
+      setIsProcessing(false);
     }
-    // Jeśli był redirect, React przerwie renderowanie tego komponentu, więc else nie jest potrzebny
   };
 
   return (
@@ -51,34 +82,54 @@ export function InviteView({ invitation, isAuthenticated, userName }: InviteView
           <p className="text-sm text-muted-foreground">Nazwa Firmy</p>
           <p className="text-lg font-semibold">{invitation.companyName}</p>
         </div>
-        
+
         <div className="flex justify-center gap-2 items-center">
-            <span className="text-sm text-muted-foreground">Twoja rola:</span>
-            <Badge variant="secondary" className="uppercase">{invitation.role}</Badge>
+          <span className="text-sm text-muted-foreground">Twoja rola:</span>
+          <Badge variant="secondary" className="uppercase">
+            {invitation.role}
+          </Badge>
         </div>
 
         {isAuthenticated ? (
-           <p className="text-sm text-muted-foreground">
-             Zalogowany jako <span className="font-medium text-foreground">{userName}</span>
-           </p>
+          <p className="text-sm text-muted-foreground">
+            Zalogowany jako{" "}
+            <span className="font-medium text-foreground">
+              {userName || "Użytkownik"}
+            </span>
+          </p>
         ) : (
-           <p className="text-sm text-amber-600 font-medium bg-amber-50 p-2 rounded border border-amber-200">
-             Musisz się zalogować, aby zaakceptować zaproszenie.
-           </p>
+          <Alert className="bg-amber-50 border-amber-200">
+            <AlertCircle className="h-4 w-4 text-amber-600" />
+            <AlertDescription className="text-amber-700">
+              Musisz się zalogować, aby zaakceptować zaproszenie.
+            </AlertDescription>
+          </Alert>
         )}
 
-        {error && <p className="text-sm text-destructive font-medium">{error}</p>}
+        {error && (
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
       </CardContent>
 
       <CardFooter className="flex flex-col gap-3">
         {isAuthenticated ? (
-          <Button onClick={onAccept} className="w-full" disabled={isProcessing}>
+          <Button
+            onClick={onAccept}
+            className="w-full"
+            disabled={isProcessing}
+            aria-busy={isProcessing}
+          >
             {isProcessing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {isProcessing ? "Dołączanie..." : "Akceptuję i dołączam"}
           </Button>
         ) : (
           <Button asChild className="w-full" variant="default">
-            <Link href={`/api/auth/signin?callbackUrl=/invite/${invitation.token}`}>
+            <Link
+              href={`/api/auth/signin?callbackUrl=/invite/${encodeURIComponent(invitation.token)}`}
+            >
               Zaloguj się / Rejestracja
             </Link>
           </Button>

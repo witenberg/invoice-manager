@@ -1,42 +1,43 @@
-import { auth } from "../../auth";
+import { requireAuth } from "@/lib/route-guards";
 import { redirect } from "next/navigation";
-import { InvitationService } from "../../modules/company/invitation-service";
-import { CompanyService } from "../../modules/company/company-service";
+import { InvitationService } from "@/modules/company/invitation-service";
+import { CompanyService } from "@/modules/company/company-service";
 import { InvitationsList } from "./InvitationsList";
 import { CreateCompanyForm } from "./CreateCompanyForm";
+import { PageHeader } from "@/components/ui/page-header";
 
+/**
+ * Onboarding Page
+ * Allows users to create their first company or accept invitations
+ */
 export default async function OnboardingPage() {
-  const session = await auth();
-  
-  if (!session?.user?.email) {
-      // Jeśli nie ma sesji, przekieruj do logowania
-      // Może się zdarzyć przy race condition podczas rejestracji
-      redirect('/login')
-  }
+  // Ensure user is authenticated
+  const session = await requireAuth();
 
-  // Sprawdź, czy użytkownik już należy do jakiejś firmy
+  // Guard: Redirect to dashboard if user already has a company
   if (session.user.id) {
     const companyService = new CompanyService();
-    const userCompanies = await companyService.findUserCompanies(session.user.id);
-    
-    if (userCompanies && userCompanies.length > 0) {
-      // Użytkownik już należy do firmy, przekieruj do dashboard
-      redirect('/dashboard');
+    const userCompanies = await companyService.findUserCompanies(
+      session.user.id
+    );
+
+    if (userCompanies.length > 0) {
+      redirect("/dashboard");
     }
   }
 
-  // 1. Data Fetching (InvitationService)
+  // Fetch pending invitations for user's email
   const service = new InvitationService();
-  const invitations = await service.getPendingInvitationsByEmail(session.user.email);
+  const invitations = await service.getPendingInvitationsByEmail(
+    session.user.email || ""
+  );
 
   return (
     <div className="container max-w-2xl py-10 space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Witaj w systemie</h1>
-        <p className="text-muted-foreground mt-2">
-          Aby rozpocząć, dołącz do istniejącej firmy lub utwórz nową.
-        </p>
-      </div>
+      <PageHeader
+        title="Witaj w systemie"
+        description="Aby rozpocząć, dołącz do istniejącej firmy lub utwórz nową."
+      />
 
       {invitations.length > 0 && (
         <>
@@ -55,10 +56,12 @@ export default async function OnboardingPage() {
       )}
 
       <div className="rounded-xl border bg-card text-card-foreground shadow">
-         <div className="p-6">
-            <h3 className="text-lg font-semibold mb-4">Rejestracja nowej firmy</h3>
-            <CreateCompanyForm />
-         </div>
+        <div className="p-6">
+          <h3 className="text-lg font-semibold mb-4">
+            Rejestracja nowej firmy
+          </h3>
+          <CreateCompanyForm />
+        </div>
       </div>
     </div>
   );
