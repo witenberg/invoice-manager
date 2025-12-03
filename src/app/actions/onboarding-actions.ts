@@ -8,20 +8,68 @@ import { cookies } from "next/headers"
 import type { OnboardingActionState } from "@/types/action-types"
 import { getSafeErrorMessage, SafeError } from "@/types/error-types"
 import { isRedirectError } from "next/dist/client/components/redirect-error"
+import {
+  isValidNip,
+  isValidPostalCode,
+  isValidBuildingNumber,
+  isValidCityName,
+  isValidKsefToken,
+} from "@/lib/validation-helpers"
 
 /**
  * Validation schema for company onboarding form
+ * Uses custom validators for Polish-specific formats
  */
 const onboardingSchema = z.object({
-  name: z.string().min(2, "Nazwa jest wymagana"),
-  nip: z.string().length(10, "NIP musi mieć 10 znaków"),
-  street: z.string().min(1, "Ulica jest wymagana"),
-  buildingNumber: z.string().min(1, "Numer budynku jest wymagany"),
-  city: z.string().min(1, "Miejscowość jest wymagana"),
-  postalCode: z.string().min(5, "Kod pocztowy jest wymagany"),
-  ksefToken: z.string()
-    .min(30, "Token KSeF musi mieć co najmniej 30 znaków")
-    .max(2000, "Token jest za długi"),
+  name: z
+    .string()
+    .min(1, "Nazwa firmy jest wymagana")
+    .min(2, "Nazwa firmy musi mieć co najmniej 2 znaki")
+    .max(200, "Nazwa firmy jest za długa"),
+  
+  nip: z
+    .string()
+    .min(1, "NIP jest wymagany")
+    .length(10, "NIP musi mieć dokładnie 10 cyfr")
+    .regex(/^\d+$/, "NIP może zawierać tylko cyfry")
+    .refine(isValidNip, "NIP jest nieprawidłowy"),
+  
+  street: z
+    .string()
+    .min(1, "Ulica jest wymagana")
+    .min(2, "Nazwa ulicy musi mieć co najmniej 2 znaki")
+    .max(100, "Nazwa ulicy jest za długa"),
+  
+  buildingNumber: z
+    .string()
+    .min(1, "Numer budynku jest wymagany")
+    .refine(
+      isValidBuildingNumber,
+      "Nieprawidłowy format numeru"
+    ),
+  
+  city: z
+    .string()
+    .min(1, "Miejscowość jest wymagana")
+    .min(2, "Nazwa miejscowości musi mieć co najmniej 2 znaki")
+    .max(100, "Nazwa miejscowości jest za długa")
+    .refine(isValidCityName, "Miejscowość nie może zawierać cyfr"),
+  
+  postalCode: z
+    .string()
+    .min(1, "Kod pocztowy jest wymagany")
+    .refine(
+      isValidPostalCode,
+      "Nieprawidłowy format kodu pocztowego."
+    ),
+  
+  ksefToken: z
+    .string()
+    .min(1, "Token KSeF jest wymagany")
+    .refine(
+      isValidKsefToken,
+      "Token KSeF jest nieprawidłowy (powinien mieć minimum 30 znaków)"
+    ),
 })
 
 /**
@@ -53,13 +101,29 @@ export async function createCompanyAction(
     if (!validated.success) {
       return {
         success: false,
-        message: "Błędy w formularzu",
+        message: "Wystąpił błąd podczas rejestrowania nowej firmy.",
         errors: validated.error.flatten().fieldErrors
       }
     }
 
-    // Create company
+    // STEP 1: Validate KSeF token BEFORE creating company
+    // This prevents creating a company with invalid credentials
     const service = new CompanyService()
+    
+    try {
+      await service.validateKsefToken(
+        validated.data.nip,
+        validated.data.ksefToken
+      );
+    } catch (ksefError) {
+      // If KSeF validation fails, return error to user
+      return {
+        success: false,
+        message: getSafeErrorMessage(ksefError),
+      };
+    }
+
+    // STEP 2: Create company (only if KSeF token is valid)
     const newCompany = await service.createCompanyWithKsef({
       userId: session.user.id,
       name: validated.data.name,
@@ -74,18 +138,18 @@ export async function createCompanyAction(
       ksefToken: validated.data.ksefToken
     })
 
-    // Try to establish KSeF session (non-blocking)
-    // If this fails, company is still created successfully
+    // STEP 3: Establish full KSeF session and save session token
+    // This should succeed since we already validated the token
     try {
       await service.testConnection(session.user.id, newCompany.id);
     } catch (ksefError) {
-      // Log warning but don't block user
+      // Log warning but don't block user (company was already created)
       if (process.env.NODE_ENV === "development") {
-        console.warn("KSeF connection warning:", getSafeErrorMessage(ksefError));
+        console.warn("KSeF session warning:", getSafeErrorMessage(ksefError));
       }
     }
 
-    // Redirect to dashboard
+    // STEP 4: Redirect to dashboard
     redirect(`/dashboard/companies/${newCompany.id}`);
   } catch (error) {
     // Allow Next.js redirects to pass through

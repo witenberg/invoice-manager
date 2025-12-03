@@ -25,7 +25,9 @@ export function isValidNip(nip: string): boolean {
   for (let i = 0; i < 9; i++) {
     sum += parseInt(cleanNip[i]) * weights[i];
   }
-
+  console.log('sum', sum);
+  console.log('cleanNip', cleanNip);
+  
   const checksum = sum % 11;
   const lastDigit = parseInt(cleanNip[9]);
 
@@ -41,6 +43,48 @@ export function isValidNip(nip: string): boolean {
 export function isValidPostalCode(postalCode: string): boolean {
   const postalCodeRegex = /^\d{2}-\d{3}$/;
   return postalCodeRegex.test(postalCode);
+}
+
+/**
+ * Validates building/apartment number
+ * Accepts: "1", "12", "12A", "12/3", "12A/3"
+ * 
+ * @param number - Building or apartment number
+ * @returns True if valid format
+ */
+export function isValidBuildingNumber(number: string): boolean {
+  const buildingNumberRegex = /^\d+[A-Za-z]?(\/\d+[A-Za-z]?)?$/;
+  return buildingNumberRegex.test(number.trim());
+}
+
+/**
+ * Validates city name (no digits allowed)
+ * 
+ * @param city - City name to validate
+ * @returns True if valid (contains only letters, spaces, and Polish characters)
+ */
+export function isValidCityName(city: string): boolean {
+  // Polish characters included: ąćęłńóśźż
+  const cityRegex = /^[a-zA-ZąćęłńóśźżĄĆĘŁŃÓŚŹŻ\s\-]+$/;
+  return cityRegex.test(city.trim()) && city.trim().length >= 2;
+}
+
+/**
+ * Validates KSeF authorization token format
+ * Token should be at least 30 characters (base64-like format with possible padding)
+ * 
+ * @param token - KSeF token to validate
+ * @returns True if valid format
+ */
+export function isValidKsefToken(token: string): boolean {
+  const cleanToken = token.trim();
+  // KSeF tokens are typically 30+ characters in base64/base64url format
+  // May contain A-Z, a-z, 0-9, +, /, -, _, and = (padding)
+  return (
+    cleanToken.length >= 30 &&
+    cleanToken.length <= 2000 &&
+    /^[A-Za-z0-9+/\-_=]+$/.test(cleanToken)
+  );
 }
 
 /**
@@ -160,5 +204,6 @@ export function isValidFileSize(
   const maxSizeInBytes = maxSizeInMB * 1024 * 1024;
   return sizeInBytes <= maxSizeInBytes;
 }
+
 
 

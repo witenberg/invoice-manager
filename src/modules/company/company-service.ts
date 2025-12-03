@@ -85,6 +85,57 @@ export class CompanyService {
   }
 
   /**
+   * Validates KSeF token without creating a company
+   * Performs a lightweight check by attempting to login
+   * 
+   * @param nip - Company NIP
+   * @param ksefToken - KSeF authorization token
+   * @throws SafeError if token is invalid or KSeF login fails
+   */
+  async validateKsefToken(nip: string, ksefToken: string): Promise<void> {
+    // Basic validation
+    if (!nip || nip.length !== 10) {
+      throw new SafeError("NIP musi mieć dokładnie 10 znaków.");
+    }
+
+    if (!ksefToken || ksefToken.trim().length < 30) {
+      throw new SafeError("Token KSeF jest nieprawidłowy.");
+    }
+
+    // Initialize KSeF client
+    const ksefClient = new KsefClient();
+
+    try {
+      // Attempt login to validate token
+      // We don't save the session, just validate that credentials work
+      await ksefClient.login(nip, ksefToken.trim());
+    } catch (error) {
+      // Log full error for debugging
+      if (process.env.NODE_ENV === "development") {
+        console.error("KSeF token validation error:", error);
+      }
+
+      // Map known KSeF error codes to user-friendly messages
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        
+        if (errorMsg.includes("błędnego tokenu") || errorMsg.includes("21418")) {
+          throw new SafeError("Token KSeF jest nieprawidłowy. Sprawdź czy skopiowałeś cały token.");
+        }
+        
+        if (errorMsg.includes("timeout")) {
+          throw new SafeError("Przekroczono limit czasu połączenia z KSeF. Spróbuj ponownie.");
+        }
+      }
+
+      // For other errors, provide generic message
+      throw new SafeError(
+        "Nie udało się zweryfikować tokena KSeF. Sprawdź poprawność danych i spróbuj ponownie."
+      );
+    }
+  }
+
+  /**
    * Tests KSeF connection for a specific company
    * Logs in to KSeF and saves resulting session token
    * 

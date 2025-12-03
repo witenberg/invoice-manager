@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { PasswordInput } from "@/components/ui/password-input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Alert } from "@/components/ui/alert"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import Link from "next/link"
 import { signIn } from "next-auth/react"
 
@@ -42,11 +42,13 @@ export function RegisterForm() {
             <CardContent>
                 {state?.message && !state.success && (
                     <Alert variant="destructive" className="mb-4">
-                        {state.message}
+                        <AlertDescription>
+                            {state.message}
+                        </AlertDescription>
                     </Alert>
                 )}
 
-                <form action={formAction} className="space-y-4">
+                <form action={formAction} className="space-y-4" noValidate>
                     <div className="space-y-2">
                         <Label htmlFor="name">
                             Imię <span className="text-muted-foreground text-xs">(opcjonalne)</span>
@@ -73,7 +75,6 @@ export function RegisterForm() {
                             name="email"
                             type="email"
                             placeholder="twoj@email.pl"
-                            required
                             autoComplete="email"
                             aria-invalid={!!state?.errors?.email}
                         />
@@ -90,7 +91,6 @@ export function RegisterForm() {
                             id="password"
                             name="password"
                             placeholder="••••••••"
-                            required
                             autoComplete="new-password"
                             aria-invalid={!!state?.errors?.password}
                         />
@@ -110,7 +110,6 @@ export function RegisterForm() {
                             id="confirmPassword"
                             name="confirmPassword"
                             placeholder="••••••••"
-                            required
                             autoComplete="new-password"
                             aria-invalid={!!state?.errors?.confirmPassword}
                         />

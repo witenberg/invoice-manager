@@ -14,9 +14,21 @@ export type ActionState<TData = never> = {
 } & ([TData] extends [never] ? {} : { data: TData });
 
 /**
- * Action state for onboarding flow (company creation)
+ * Processing stages for onboarding flow
  */
-export type OnboardingActionState = ActionState<never>;
+export type OnboardingStage = 
+  | "validating_form"      // Validating form data format
+  | "validating_ksef"      // Validating KSeF token with API
+  | "creating_company"     // Creating company in database
+  | "idle";                // No processing
+
+/**
+ * Action state for onboarding flow (company creation)
+ * Includes stage information for progressive UI feedback
+ */
+export type OnboardingActionState = ActionState<never> & {
+  stage?: OnboardingStage;
+};
 
 /**
  * Action state for invitation acceptance

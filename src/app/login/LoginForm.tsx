@@ -61,7 +61,7 @@ export function LoginForm({ showRegisteredMessage, callbackUrl }: LoginFormProps
                     </Alert>
                 )}
 
-                <form action={formAction} className="space-y-4">
+                <form action={formAction} className="space-y-4" noValidate>
                     <div className="space-y-2">
                         <Label htmlFor="email">Email</Label>
                         <Input
@@ -69,7 +69,6 @@ export function LoginForm({ showRegisteredMessage, callbackUrl }: LoginFormProps
                             name="email"
                             type="email"
                             placeholder="twoj@email.pl"
-                            required
                             autoComplete="email"
                             aria-invalid={!!state?.errors?.email}
                         />
@@ -89,7 +88,6 @@ export function LoginForm({ showRegisteredMessage, callbackUrl }: LoginFormProps
                             id="password"
                             name="password"
                             placeholder="••••••••"
-                            required
                             autoComplete="current-password"
                             aria-invalid={!!state?.errors?.password}
                         />

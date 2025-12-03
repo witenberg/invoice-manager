@@ -132,7 +132,7 @@ export async function registerAction(
         if (!validated.success) {
             return {
                 success: false,
-                message: "Błędy w formularzu",
+                message: "Wystąpił błąd podczas rejestracji",
                 errors: validated.error.flatten().fieldErrors,
             }
         }
