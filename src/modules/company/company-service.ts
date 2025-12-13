@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { companies, companyMembers, ksefCredentials } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { encrypt, decrypt, EncryptionError } from "@/lib/encryption";
-import { KsefClient } from "@/modules/ksef/client";
+import { KsefAuthService } from "@/modules/ksef/services";
 import { SafeError } from "@/types/error-types";
 import type { Company, CompanyMember } from "@/types/database-types";
 import type { CompanyRole, KsefEnvironment } from "@/types/ksef-types";
@@ -102,13 +102,13 @@ export class CompanyService {
       throw new SafeError("Token KSeF jest nieprawidłowy.");
     }
 
-    // Initialize KSeF client
-    const ksefClient = new KsefClient();
+    // Initialize KSeF auth service
+    const ksefAuthService = new KsefAuthService();
 
     try {
       // Attempt login to validate token
       // We don't save the session, just validate that credentials work
-      await ksefClient.login(nip, ksefToken.trim());
+      await ksefAuthService.login(nip, ksefToken.trim());
     } catch (error) {
       // Log full error for debugging
       if (process.env.NODE_ENV === "development") {
@@ -194,12 +194,12 @@ export class CompanyService {
       throw new SafeError("Błąd wewnętrzny podczas przetwarzania tokena.");
     }
 
-    // Initialize KSeF client
-    const ksefClient = new KsefClient();
+    // Initialize KSeF auth service
+    const ksefAuthService = new KsefAuthService();
 
     try {
       // Perform full login (Challenge -> Encrypt -> Init -> Redeem)
-      const sessionResponse = await ksefClient.login(
+      const sessionResponse = await ksefAuthService.login(
         companyData.nip,
         rawAuthToken
       );
@@ -210,7 +210,6 @@ export class CompanyService {
         .set({
           sessionToken: sessionResponse.accessToken.token,
           sessionValidUntil: new Date(sessionResponse.accessToken.validUntil),
-          lastSessionReferenceNumber: sessionResponse.referenceNumber,
         })
         .where(eq(ksefCredentials.companyId, companyId));
 
@@ -389,5 +388,36 @@ export class CompanyService {
       .where(eq(companyMembers.userId, userId));
 
     return result;
+  }
+
+  /**
+   * Finds company by ID and verifies user access
+   * 
+   * @param userId - User ID to verify access
+   * @param companyId - Company ID to find
+   * @returns Company data if found and user has access
+   * @throws SafeError if company not found or user doesn't have access
+   */
+  public async findById(userId: string, companyId: number): Promise<Company> {
+    // Verify user has access to this company
+    await this.ensureUserHasAccess(userId, companyId);
+
+    const [company] = await db
+      .select({
+        id: companies.id,
+        name: companies.name,
+        nip: companies.nip,
+        addressData: companies.addressData,
+        createdAt: companies.createdAt,
+      })
+      .from(companies)
+      .where(eq(companies.id, companyId))
+      .limit(1);
+
+    if (!company) {
+      throw new SafeError("Nie znaleziono firmy.");
+    }
+
+    return company;
   }
 }

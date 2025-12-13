@@ -8,6 +8,7 @@ import type {
   companyMembers,
   companyInvitations,
   users,
+  contractors,
 } from "@/db/schema";
 
 /**
@@ -24,6 +25,9 @@ export type CompanyInvitationInsert = typeof companyInvitations.$inferInsert;
 
 export type User = typeof users.$inferSelect;
 export type UserInsert = typeof users.$inferInsert;
+
+export type Contractor = typeof contractors.$inferSelect;
+export type ContractorInsert = typeof contractors.$inferInsert;
 
 /**
  * Company with member count (for listings)

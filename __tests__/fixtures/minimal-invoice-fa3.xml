@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2025/06/25/13775/"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xmlns:etd="http://crd.gov.pl/xml/schematy/dziedzinowe/mf/2022/01/05/eD/DefinicjeTypy/"
+         xsi:schemaLocation="http://crd.gov.pl/wzor/2025/06/25/13775/ schemat.xsd">
+
+    <Naglowek>
+        <KodFormularza kodSystemowy="FA (3)" wersjaSchemy="1-0E">FA</KodFormularza>
+        <WariantFormularza>3</WariantFormularza>
+        <DataWytworzeniaFa>2025-09-01T10:30:00Z</DataWytworzeniaFa>
+        <SystemInfo>Aplikacja Testowa KSeF v1.0</SystemInfo>
+    </Naglowek>
+
+    <Podmiot1>
+        <PrefiksPodatnika>PL</PrefiksPodatnika>
+        <DaneIdentyfikacyjne>
+            <NIP>9531882753</NIP>
+            <Nazwa>FIRMA TESTOWA JAN KOWALSKI</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Testowa 1/2, 00-001 Warszawa</AdresL1>
+        </Adres>
+        <DaneKontaktowe>
+            <Email>ksiegowosc@firma-testowa.pl</Email>
+            <Telefon>500600700</Telefon>
+        </DaneKontaktowe>
+    </Podmiot1>
+
+    <Podmiot2>
+        <DaneIdentyfikacyjne>
+            <NIP>5250005834</NIP>
+            <Nazwa>KONTRAHENT SPÓŁKA Z O.O.</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Kupiecka 50, 50-500 Wrocław</AdresL1>
+        </Adres>
+        <NrKlienta>KL/2025/09/001</NrKlienta>
+        <JST>2</JST>
+        <GV>2</GV>
+    </Podmiot2>
+
+    <Podmiot3>
+        <DaneIdentyfikacyjne>
+            <NIP>5250005834</NIP>
+            <Nazwa>MAGAZYN CENTRALNY KONTRAHENTA</Nazwa>
+        </DaneIdentyfikacyjne>
+        <Adres>
+            <KodKraju>PL</KodKraju>
+            <AdresL1>ul. Magazynowa 1, 90-001 Łódź</AdresL1>
+        </Adres>
+        <Rola>2</Rola>
+    </Podmiot3>
+
+    <Fa>
+        <KodWaluty>PLN</KodWaluty>
+        <P_1>2025-09-01</P_1>
+        <P_1M>Warszawa</P_1M>
+        <P_2>FV/2025/09/002</P_2>
+        
+        <OkresFa>
+            <P_6_Od>2025-08-01</P_6_Od>
+            <P_6_Do>2025-08-31</P_6_Do>
+        </OkresFa>
+
+        <P_13_1>1000.00</P_13_1>
+        <P_14_1>230.00</P_14_1>
+        <P_13_2>500.00</P_13_2>
+        <P_14_2>40.00</P_14_2>
+        <P_13_7>200.00</P_13_7>
+        <P_13_10>3000.00</P_13_10>
+        <P_15>4970.00</P_15>
+
+        <Adnotacje>
+            <P_16>2</P_16>
+            <P_17>2</P_17>
+            <P_18>1</P_18>
+            <P_18A>1</P_18A>
+            <Zwolnienie>
+                <P_19>1</P_19>
+                <P_19A>art. 43 ust. 1 pkt 18 ustawy o VAT</P_19A>
+            </Zwolnienie>
+            <NoweSrodkiTransportu>
+                <P_22N>1</P_22N>
+            </NoweSrodkiTransportu>
+            <P_23>2</P_23>
+            <PMarzy>
+                <P_PMarzyN>1</P_PMarzyN>
+            </PMarzy>
+        </Adnotacje>
+
+        <RodzajFaktury>VAT</RodzajFaktury>
+
+        <FaWiersz>
+            <NrWierszaFa>1</NrWierszaFa>
+            <P_7>Usługa programistyczna</P_7>
+            <PKWiU>62.01.11.0</PKWiU>
+            <P_8A>godz.</P_8A>
+            <P_8B>10</P_8B>
+            <P_9A>100.00</P_9A>
+            <P_11>1000.00</P_11>
+            <P_12>23</P_12>
+        </FaWiersz>
+
+        <FaWiersz>
+            <NrWierszaFa>2</NrWierszaFa>
+            <P_7>Nawóz ekologiczny</P_7>
+            <Indeks>NAW-001</Indeks>
+            <P_8A>szt.</P_8A>
+            <P_8B>10</P_8B>
+            <P_9A>50.00</P_9A>
+            <P_11>500.00</P_11>
+            <P_12>8</P_12>
+            <GTU>GTU_01</GTU>
+        </FaWiersz>
+
+        <FaWiersz>
+            <NrWierszaFa>3</NrWierszaFa>
+            <P_7>Usługa szkoleniowa (zwolniona)</P_7>
+            <P_11>200.00</P_11>
+            <P_12>zw</P_12>
+        </FaWiersz>
+
+        <FaWiersz>
+            <NrWierszaFa>4</NrWierszaFa>
+            <P_7>Procesory (Odwrotne obciążenie)</P_7>
+            <P_8B>1</P_8B>
+            <P_11>3000.00</P_11>
+            <P_12>oo</P_12>
+            <P_12_Zal_15>1</P_12_Zal_15>
+        </FaWiersz>
+
+        <Platnosc>
+            <TerminPlatnosci>
+                <Termin>2025-09-14</Termin>
+                <TerminOpis>
+                    <Ilosc>14</Ilosc>
+                    <Jednostka>Dni</Jednostka>
+                    <ZdarzeniePoczatkowe>DataWystawienia</ZdarzeniePoczatkowe>
+                </TerminOpis>
+            </TerminPlatnosci>
+            <FormaPlatnosci>6</FormaPlatnosci>
+            <RachunekBankowy>
+                <NrRB>11111111111111111111111111</NrRB>
+                <NazwaBanku>Bank Testowy SA</NazwaBanku>
+            </RachunekBankowy>
+        </Platnosc>
+
+        <WarunkiTransakcji>
+            <Umowy>
+                <DataUmowy>2025-01-01</DataUmowy>
+                <NrUmowy>UM/2025/01</NrUmowy>
+            </Umowy>
+            <Transport>
+                <RodzajTransportu>3</RodzajTransportu>
+                <Przewoznik>
+                    <DaneIdentyfikacyjne>
+                        <NIP>9999999999</NIP>
+                        <Nazwa>TRANS-POL SP. Z O.O.</Nazwa>
+                    </DaneIdentyfikacyjne>
+                    <AdresPrzewoznika>
+                        <KodKraju>PL</KodKraju>
+                        <AdresL1>ul. Transportowa 1, Warszawa</AdresL1>
+                    </AdresPrzewoznika>
+                </Przewoznik>
+                <OpisLadunku>11</OpisLadunku>
+                <DataGodzRozpTransportu>2025-09-02T08:00:00Z</DataGodzRozpTransportu>
+                <WysylkaZ>
+                    <KodKraju>PL</KodKraju>
+                    <AdresL1>ul. Magazynowa 5, Pruszków</AdresL1>
+                </WysylkaZ>
+                <WysylkaDo>
+                    <KodKraju>PL</KodKraju>
+                    <AdresL1>ul. Magazynowa 1, Łódź</AdresL1>
+                </WysylkaDo>
+            </Transport>
+        </WarunkiTransakcji>
+    </Fa>
+
+    <Stopka>
+        <Informacje>
+            <StopkaFaktury>Kapitał zakładowy: 50 000 PLN, Opłacony w całości.</StopkaFaktury>
+        </Informacje>
+        <Rejestry>
+            <KRS>0000123456</KRS>
+            <REGON>123456789</REGON>
+            <BDO>000001234</BDO>
+        </Rejestry>
+    </Stopka>
+
+</Faktura>

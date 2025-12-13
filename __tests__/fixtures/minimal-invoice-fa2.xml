@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Faktura xmlns="http://crd.gov.pl/wzor/2023/06/29/12648/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <Naglowek>
+    <KodFormularza kodSystemowy="FA (2)" wersjaSchemy="1-0E">FA</KodFormularza>
+    <WariantFormularza>2</WariantFormularza>
+    <DataWytworzeniaFa>2025-12-11T10:00:00Z</DataWytworzeniaFa>
+    <SystemInfo>Invoice Manager v1.0</SystemInfo>
+  </Naglowek>
+  <Podmiot1>
+    <DaneIdentyfikacyjne>
+      <NIP>9531882753</NIP>
+      <Nazwa>Test Sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Testowa 1</AdresL1>
+      <AdresL2>00-001 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot1>
+  <Podmiot2>
+    <DaneIdentyfikacyjne>
+      <NIP>0987654321</NIP>
+      <Nazwa>Nabywca Test Sp. z o.o.</Nazwa>
+    </DaneIdentyfikacyjne>
+    <Adres>
+      <KodKraju>PL</KodKraju>
+      <AdresL1>ul. Nabywcy 2</AdresL1>
+      <AdresL2>00-002 Warszawa</AdresL2>
+    </Adres>
+  </Podmiot2>
+  <Fa>
+    <KodWaluty>PLN</KodWaluty>
+    <P_1>2025-12-11</P_1>
+    <P_2>FA/TEST/2025/001</P_2>
+    <P_13_1>100.00</P_13_1>
+    <P_14_1>23.00</P_14_1>
+    <P_15>123.00</P_15>
+    <FaWiersze>
+      <FaWiersz>
+        <NrWierszaFa>1</NrWierszaFa>
+        <P_7>Usługa testowa</P_7>
+        <P_8A>szt</P_8A>
+        <P_8B>1</P_8B>
+        <P_9A>100.00</P_9A>
+        <P_11>100.00</P_11>
+        <P_12>23</P_12>
+      </FaWiersz>
+    </FaWiersze>
+    <Rozliczenie>
+      <P_13_1>100.00</P_13_1>
+      <P_14_1>23.00</P_14_1>
+      <P_15>123.00</P_15>
+    </Rozliczenie>
+  </Fa>
+</Faktura>
+
