@@ -201,19 +201,35 @@ export interface FailedSessionInvoicesResponse {
 export interface SessionInvoiceStatusResponse {
   /** Sequential number of the invoice in the session */
   ordinalNumber: number;
+  /** Invoice number (from the invoice itself) */
+  invoiceNumber: string;
+  /** KSeF number assigned to the invoice (35-char identifier) - present when status is 200 */
+  ksefNumber: string;
   /** Reference number for tracking this invoice */
   referenceNumber: string;
+  /** Invoice hash (SHA-256) */
+  invoiceHash: string;
+  /** Date/time when the invoice was acquired by KSeF (ISO 8601) */
+  acquisitionDate: string;
   /** Date/time when the invoice was submitted (ISO 8601) */
   invoicingDate: string;
+  /** Date/time when the invoice was permanently stored (ISO 8601) */
+  permanentStorageDate: string;
+  /** UPO download URL */
+  upoDownloadUrl: string;
+  /** UPO download URL expiration date (ISO 8601) */
+  upoDownloadUrlExpirationDate: string;
+  /** Invoicing mode (Online/Offline) */
+  invoicingMode: string;
   /** Invoice processing status */
   status: {
     /** Status code (200 = success, 4xx = error, e.g., 440 = duplicate) */
     code: number;
     /** Human-readable status description */
     description: string;
-    /** Optional array of detailed error messages */
+    /** Optional array of detailed error messages (present when status is not 200) */
     details?: string[] | null;
-    /** Optional additional status extensions */
+    /** Optional additional status extensions (e.g., for duplicate invoices) */
     extensions?: {
       /** Reference number of the original session where invoice was submitted */
       originalSessionReferenceNumber?: string | null;

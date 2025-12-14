@@ -192,7 +192,27 @@ export const invoices = pgTable('invoices', {
     // If the contractor changes address later, this invoice must NOT change.
     buyerNameSnapshot: text('buyer_name_snapshot').notNull(),
     buyerNipSnapshot: text('buyer_nip_snapshot'),
-    buyerAddressSnapshot: text('buyer_address_snapshot').notNull(),
+    buyerAddressSnapshot: jsonb('buyer_address_snapshot').$type<{
+        street: string;
+        buildingNumber: string;
+        flatNumber?: string;
+        city: string;
+        postalCode: string;
+        countryCode: string;
+    }>().notNull(),
+
+    // --- RECIPIENT (Optional, when different from buyer) ---
+    hasRecipient: boolean('has_recipient').default(false).notNull(),
+    recipientNameSnapshot: text('recipient_name_snapshot'),
+    recipientNipSnapshot: text('recipient_nip_snapshot'),
+    recipientAddressSnapshot: jsonb('recipient_address_snapshot').$type<{
+        street: string;
+        buildingNumber: string;
+        flatNumber?: string;
+        city: string;
+        postalCode: string;
+        countryCode: string;
+    }>(),
 
     // --- INVOICE DETAILS ---
     number: text('number').notNull(), // e.g., "FV/1/2024"
@@ -203,7 +223,11 @@ export const invoices = pgTable('invoices', {
     paymentDeadline: timestamp('payment_deadline', { mode: 'date' }),
 
     paymentMethod: text('payment_method').default('transfer'), // transfer, cash, card
+    bankAccount: text('bank_account'), // Numer konta bankowego (opcjonalny)
     splitPayment: boolean('split_payment').default(false), // MPP (Mechanizm Podzielonej Płatności)
+    reverseCharge: boolean('reverse_charge').default(false), // Odwrotne obciążenie
+    cashMethod: boolean('cash_method').default(false), // Metoda kasowa
+    selfBilling: boolean('self_billing').default(false), // Samofakturowanie
 
     // --- FINANCIALS ---
     currency: text('currency').default('PLN').notNull(),
@@ -228,11 +252,29 @@ export const invoices = pgTable('invoices', {
     ksefReferenceNumber: text('ksef_reference_number'), // Internal ref for API calls
     ksefSessionId: text('ksef_session_id'), // Session ID during upload
 
-    // UPO (Urzędowe Poświadczenie Odbioru) - usually XML, store raw or link
+    // UPO (Urzędowe Poświadczenie Odbioru)
     ksefUpoRaw: text('ksef_upo_raw'),
 
     // Validation errors from KSeF
     ksefErrors: jsonb('ksef_errors').$type<string[]>(),
+
+    // --- USER PREFERENCES ---
+    sendToKsef: boolean('send_to_ksef').default(true).notNull(), // Czy wysłać do KSeF (może być false dla draft)
+
+    // --- NOTES ---
+    notes: text('notes'), // Uwagi/notatki do faktury
+
+    // --- CORRECTION INVOICE FIELDS (only for type='CORRECTION') ---
+    originalInvoiceNumber: text('original_invoice_number'), // Numer faktury korygowanej
+    originalInvoiceIssueDate: timestamp('original_invoice_issue_date', { mode: 'date' }),
+    originalInvoiceKsefNumber: text('original_invoice_ksef_number'), // KSeF number faktury korygowanej
+    correctionReason: text('correction_reason'), // Przyczyna korekty (max 500 znaków)
+
+    // --- ADVANCE INVOICE FIELDS (only for type='ADVANCE') ---
+    orderValue: decimal('order_value', { precision: 12, scale: 2 }), // Wartość zamówienia
+    orderDate: timestamp('order_date', { mode: 'date' }), // Data zamówienia
+    orderNumber: text('order_number'), // Numer zamówienia (opcjonalny)
+    advancePercentage: decimal('advance_percentage', { precision: 5, scale: 2 }), // Procent zaliczki (0-100)
 
     createdAt: timestamp('created_at').defaultNow(),
     updatedAt: timestamp('updated_at').defaultNow().$onUpdate(() => new Date()),
@@ -270,6 +312,19 @@ export const invoiceItems = pgTable('invoice_items', {
 
     // GTU Codes (01-13) - Optional per item
     gtuCode: text('gtu_code'),
+    
+    // Additional classification codes
+    pkwiu: text('pkwiu'), // PKWiU code (Polish classification)
+    cn: text('cn'), // CN code (Combined Nomenclature)
+
+    // --- CORRECTION ITEM FIELDS (only for correction invoices) ---
+    // These fields are nullable - only populated for CORRECTION type invoices
+    quantityBefore: decimal('quantity_before', { precision: 10, scale: 3 }),
+    netPriceBefore: decimal('net_price_before', { precision: 12, scale: 2 }),
+    vatRateBefore: text('vat_rate_before'),
+    quantityAfter: decimal('quantity_after', { precision: 10, scale: 3 }),
+    netPriceAfter: decimal('net_price_after', { precision: 12, scale: 2 }),
+    vatRateAfter: text('vat_rate_after'),
 });
 
 /**

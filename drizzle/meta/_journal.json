@@ -22,6 +22,13 @@
       "when": 1764706213659,
       "tag": "0002_sudden_jigsaw",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1765663750166,
+      "tag": "0003_thin_husk",
+      "breakpoints": true
     }
   ]
 }

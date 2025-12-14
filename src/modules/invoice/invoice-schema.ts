@@ -310,10 +310,56 @@ export interface InvoiceTotals {
 }
 
 /**
- * Calculates invoice totals from items
+ * Calculates invoice totals from invoice form data
+ * Supports all invoice types: VAT, CORRECTION, ADVANCE
  * Uses string arithmetic to avoid floating point errors
+ * 
+ * @param formData - Invoice form data (can be full InvoiceFormData or just items array)
+ * @returns Calculated totals with VAT breakdown
  */
 export function calculateInvoiceTotals(
+  formData: InvoiceFormData | InvoiceItemFormData[]
+): InvoiceTotals {
+  // Handle array of items (backward compatibility - only InvoiceItemFormData[])
+  if (Array.isArray(formData)) {
+    return calculateTotalsFromItems(formData);
+  }
+
+  // Handle full InvoiceFormData
+  if (formData.type === "VAT" || formData.type === "ADVANCE") {
+    // Standard items with quantity and netPrice
+    const items = formData.items.filter(
+      (item) => "quantity" in item && "netPrice" in item
+    ) as InvoiceItemFormData[];
+    return calculateTotalsFromItems(items);
+  } else if (formData.type === "CORRECTION") {
+    // For correction invoices, calculate from "after" values
+    const correctionItems = formData.items as CorrectionItemFormData[];
+    const items: InvoiceItemFormData[] = correctionItems.map((item) => ({
+      name: item.name,
+      quantity: item.quantityAfter,
+      unit: item.unit,
+      netPrice: item.netPriceAfter,
+      vatRate: item.vatRateAfter as "23" | "8" | "5" | "0" | "zw" | "np" | "oo",
+      gtuCode: item.gtuCode,
+    }));
+    return calculateTotalsFromItems(items);
+  }
+
+  // Fallback
+  return {
+    totalNet: "0.00",
+    totalVat: "0.00",
+    totalGross: "0.00",
+    vatBreakdown: [],
+  };
+}
+
+/**
+ * Internal helper: Calculates totals from array of items
+ * Used by calculateInvoiceTotals for actual calculation
+ */
+function calculateTotalsFromItems(
   items: InvoiceItemFormData[]
 ): InvoiceTotals {
   const vatBreakdownMap = new Map<

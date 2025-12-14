@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { companies, invoices, invoiceItems, ksefCredentials } from "@/db/schema";
+import { companies, invoices, invoiceItems, ksefCredentials, contractors } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { KsefSessionManager } from "../ksef/services/session-manager";
 import { KsefClient } from "../ksef/client";
@@ -10,6 +10,9 @@ import { decrypt } from "@/lib/encryption";
 import type {
   InvoiceFormData,
   InvoiceTotals,
+  VatInvoiceFormData,
+  CorrectionInvoiceFormData,
+  AdvanceInvoiceFormData,
 } from "./invoice-schema";
 import { calculateInvoiceTotals } from "./invoice-schema";
 import { parseInvoiceToKsef } from "./invoice-to-ksef-parser";
@@ -81,20 +84,32 @@ export class InvoiceService {
       );
     }
 
-    // Step 2: Calculate totals (for validation/logging)
-    // const totals = calculateInvoiceTotals(
-    //   formData.items.filter((item) => "quantity" in item && "netPrice" in item)
-    // );
+    // Step 2: Calculate totals
+    const totals = calculateInvoiceTotals(formData);
 
-    // If user doesn't want to send to KSeF, return error (we don't save drafts anymore)
+    // Step 3: Find contractor by NIP (if provided)
+    const contractorId = await this.findContractorByNip(companyId, formData.buyer.nip);
+
+    // Step 4: Save invoice to database (DRAFT or PROCESSING status)
+    const invoiceId = await this.saveInvoiceToDatabase(
+      companyId,
+      contractorId,
+      formData,
+      totals,
+      {
+        ksefStatus: formData.sendToKsef ? "PROCESSING" : "DRAFT",
+      }
+    );
+
+    // If user doesn't want to send to KSeF, return success (draft saved)
     if (!formData.sendToKsef) {
-      throw new InvoiceServiceError(
-        "Send to KSeF is disabled",
-        "Aby utworzyć fakturę, musisz zaznaczyć opcję 'Wyślij do KSeF'."
-      );
+      return {
+        success: true,
+        message: "Faktura została zapisana jako szkic.",
+      };
     }
 
-    // Step 3: Parse form data to KSeF structure
+    // Step 5: Parse form data to KSeF structure
     const ksefInput = parseInvoiceToKsef(formData, {
       company: {
         name: company.name,
@@ -103,39 +118,36 @@ export class InvoiceService {
       },
     });
 
-    console.log("ksefInput", ksefInput);
-
-    // Step 4: Generate XML
+    // Step 6: Generate XML
     const invoiceXml = generateKsefXml(ksefInput);
-    console.log("invoiceXml", invoiceXml);
 
-    // Step 5-9: Submit to KSeF
+    // Step 7-11: Submit to KSeF
     let ksefResult;
     try {
       ksefResult = await this.submitToKsef(
-        company.nip,
-        rawAuthToken,
         invoiceXml,
-        companyId
+        companyId,
+        invoiceId // Pass invoice ID to update status
       );
+      
+      // Update invoice with KSeF reference numbers
+      await this.updateInvoiceKsefData(invoiceId, {
+        ksefReferenceNumber: ksefResult.invoiceReferenceNumber,
+        ksefSessionId: ksefResult.sessionReferenceNumber,
+      });
     } catch (error) {
-      // KSeF submission failed
+      // KSeF submission failed - update status to REJECTED
       console.error("KSeF submission error:", error);
+      
+      await this.updateInvoiceStatus(invoiceId, "REJECTED", {
+        ksefErrors: [error instanceof Error ? error.message : "Unknown error"],
+      });
       
       throw new InvoiceServiceError(
         `KSeF submission failed: ${error instanceof Error ? error.message : "Unknown"}`,
-        "Nie udało się wysłać faktury do KSeF. Spróbuj ponownie."
+        "Nie udało się wysłać faktury do KSeF. Faktura została zapisana ze statusem 'Odrzucona'."
       );
     }
-
-    // TODO: Save invoice to database after KSeF accepts it
-    // This should be done when we receive UPO (Urzędowe Poświadczenie Odbioru) confirmation
-    // Placeholder for future implementation:
-    // - Wait for UPO confirmation from KSeF
-    // - Parse UPO to get KSeF number
-    // - Save invoice with status "VALID" and KSeF number
-    // - Save invoice items
-    // - Link to contractor if applicable
 
     return {
       success: true,
@@ -150,10 +162,9 @@ export class InvoiceService {
    * Automatically retries once with refreshed token if authorization fails
    */
   private async submitToKsef(
-    nip: string,
-    authToken: string,
     invoiceXml: string,
-    companyId: number
+    companyId: number,
+    invoiceId: number
   ): Promise<{
     sessionReferenceNumber: string;
     invoiceReferenceNumber: string;
@@ -161,7 +172,7 @@ export class InvoiceService {
     const sessionManager = new KsefSessionManager();
     
     try {
-      return await this.executeKsefSubmission(sessionManager, invoiceXml, companyId);
+      return await this.executeKsefSubmission(sessionManager, invoiceXml, companyId, invoiceId);
     } catch (error) {
       // Check if it's an authorization error (401/403)
       const errorMessage = error instanceof Error ? error.message : String(error);
@@ -176,7 +187,7 @@ export class InvoiceService {
           await sessionManager.forceRefreshToken(companyId);
           
           // Retry the submission with new token
-          return await this.executeKsefSubmission(sessionManager, invoiceXml, companyId);
+          return await this.executeKsefSubmission(sessionManager, invoiceXml, companyId, invoiceId);
         } catch (retryError) {
           console.error("[KSeF] Retry after token refresh failed:", retryError);
           throw retryError;
@@ -195,7 +206,8 @@ export class InvoiceService {
   private async executeKsefSubmission(
     sessionManager: KsefSessionManager,
     invoiceXml: string,
-    companyId: number
+    companyId: number,
+    invoiceId: number
   ): Promise<{
     sessionReferenceNumber: string;
     invoiceReferenceNumber: string;
@@ -260,11 +272,21 @@ export class InvoiceService {
       );
       console.log("[KSeF] Invoice status:", JSON.stringify(invoiceStatus, null, 2));
       
-      // TODO: Save invoice status to database
-      // - invoiceStatus.status.code: 200 = success, 4xx = error
-      // - invoiceStatus.status.description: Human-readable status
-      // - invoiceStatus.status.details: Array of error messages (if any)
-      // - invoiceStatus.status.extensions?.originalKsefNumber: KSeF number if duplicate
+      // Update invoice status based on KSeF response
+      if (invoiceStatus.status.code === 200) {
+        // Success - update to VALID with KSeF number from status response
+        // KSeF number is available directly in the status response
+        await this.updateInvoiceStatus(invoiceId, "VALID", {
+          ksefNumber: invoiceStatus.ksefNumber,
+        });
+      } else {
+        // Error - update to REJECTED
+        await this.updateInvoiceStatus(invoiceId, "REJECTED", {
+          ksefErrors: invoiceStatus.status.details || [invoiceStatus.status.description],
+          // For duplicate invoices, original KSeF number might be in extensions
+          ksefNumber: invoiceStatus.status.extensions?.originalKsefNumber || undefined,
+        });
+      }
       
     } catch (error) {
       console.warn("[KSeF] Failed to get invoice status:", error);
@@ -272,13 +294,14 @@ export class InvoiceService {
     }
 
     // Step 8: Get UPO if invoice was successfully processed
-    let upoXml: string | null = null;
+    // UPO is optional - we already have ksefNumber from status response
+    // But we can fetch UPO for archival purposes
     if (invoiceStatus && invoiceStatus.status.code === 200) {
       try {
         // Wait a bit more for UPO to be generated
         await new Promise((resolve) => setTimeout(resolve, 1000));
         
-        upoXml = await client.getInvoiceUpo(
+        const upoXml = await client.getInvoiceUpo(
           sessionToken,
           sessionResult.referenceNumber,
           submitResult.referenceNumber
@@ -286,36 +309,25 @@ export class InvoiceService {
         console.log("[KSeF] UPO received (length):", upoXml.length, "characters");
         console.log("[KSeF] UPO XML (first 500 chars):", upoXml.substring(0, 500));
         
-        // TODO: Parse UPO XML to extract:
-        // - KSeF number (35-char identifier)
-        // - Invoice status confirmation
-        // - Any additional metadata
-        // Then save to database:
-        // - ksefStatus: "VALID"
-        // - ksefNumber: from UPO
-        // - ksefUpoRaw: upoXml (or parsed version)
-        // - ksefReferenceNumber: submitResult.referenceNumber
-        // - ksefSessionId: sessionResult.referenceNumber
+        // Save UPO XML for archival purposes
+        // KSeF number is already saved from status response above
+        await this.updateInvoiceStatus(invoiceId, "VALID", {
+          ksefUpoRaw: upoXml,
+        });
         
       } catch (error) {
         console.warn("[KSeF] Failed to get UPO (may not be ready yet):", error);
-        // UPO might not be ready yet - this is not critical
-        // In production, you might want to poll for UPO or use a webhook
+        // UPO fetch failure is not critical - we already have ksefNumber from status
+        // Invoice is already marked as VALID above
       }
     } else if (invoiceStatus) {
-      // Invoice processing failed
+      // Invoice processing failed - already updated above
       console.error("[KSeF] Invoice processing failed:", {
         code: invoiceStatus.status.code,
         description: invoiceStatus.status.description,
         details: invoiceStatus.status.details,
         extensions: invoiceStatus.status.extensions,
       });
-      
-      // TODO: Save failed invoice to database
-      // - ksefStatus: "REJECTED"
-      // - ksefErrors: invoiceStatus.status.details
-      // - ksefReferenceNumber: submitResult.referenceNumber
-      // - ksefSessionId: sessionResult.referenceNumber
     }
 
     // Step 9: Close session (best effort - don't fail if it doesn't work)
@@ -351,37 +363,266 @@ export class InvoiceService {
   }
 
   /**
-   * TODO: Save invoice to database after KSeF accepts it
-   * 
-   * This method should be called when:
-   * 1. We receive UPO (Urzędowe Poświadczenie Odbioru) confirmation from KSeF
-   * 2. UPO contains KSeF number (35-char identifier)
-   * 3. Invoice status should be set to "VALID"
-   * 
-   * Implementation steps:
-   * 1. Parse UPO XML to extract KSeF number
-   * 2. Save invoice header with:
-   *    - ksefStatus: "VALID"
-   *    - ksefNumber: from UPO
-   *    - ksefReferenceNumber: from submission result
-   *    - ksefSessionId: from submission result
-   * 3. Save invoice items
-   * 4. Link to contractor if applicable (from formData.contractorId if we add it)
-   * 
-   * Placeholder signature:
-   * private async saveInvoiceToDatabase(
-   *   companyId: number,
-   *   formData: InvoiceFormData,
-   *   totals: InvoiceTotals,
-   *   ksefData: {
-   *     ksefStatus: "VALID" | "REJECTED";
-   *     ksefNumber?: string;
-   *     ksefReferenceNumber: string;
-   *     ksefSessionId: string;
-   *     ksefErrors?: string[];
-   *   }
-   * ): Promise<number>
+   * Finds contractor by NIP for the given company
+   * Returns null if not found
    */
+  private async findContractorByNip(
+    companyId: number,
+    nip: string | undefined
+  ): Promise<number | null> {
+    if (!nip || nip.trim() === "") {
+      return null;
+    }
+
+    const result = await db
+      .select({ id: contractors.id })
+      .from(contractors)
+      .where(and(eq(contractors.companyId, companyId), eq(contractors.nip, nip)))
+      .limit(1);
+
+    return result.length > 0 ? result[0].id : null;
+  }
+
+
+  /**
+   * Saves invoice to database with all fields
+   */
+  private async saveInvoiceToDatabase(
+    companyId: number,
+    contractorId: number | null,
+    formData: InvoiceFormData,
+    totals: InvoiceTotals,
+    options: {
+      ksefStatus: "DRAFT" | "PROCESSING";
+    }
+  ): Promise<number> {
+    // Prepare buyer address snapshot
+    const buyerAddress = {
+      street: formData.buyer.address.street,
+      buildingNumber: formData.buyer.address.buildingNumber,
+      flatNumber: formData.buyer.address.flatNumber || undefined,
+      city: formData.buyer.address.city,
+      postalCode: formData.buyer.address.postalCode,
+      countryCode: formData.buyer.address.countryCode,
+    };
+
+    // Prepare recipient data if exists
+    const recipientAddress = formData.hasRecipient && formData.recipient
+      ? {
+          street: formData.recipient.address.street,
+          buildingNumber: formData.recipient.address.buildingNumber,
+          flatNumber: formData.recipient.address.flatNumber || undefined,
+          city: formData.recipient.address.city,
+          postalCode: formData.recipient.address.postalCode,
+          countryCode: formData.recipient.address.countryCode,
+        }
+      : undefined;
+
+    // Prepare base invoice data
+    const invoiceData: any = {
+      companyId,
+      contractorId,
+      buyerNameSnapshot: formData.buyer.name,
+      buyerNipSnapshot: formData.buyer.nip || null,
+      buyerAddressSnapshot: buyerAddress,
+      hasRecipient: formData.hasRecipient,
+      recipientNameSnapshot: formData.hasRecipient && formData.recipient
+        ? formData.recipient.name
+        : null,
+      recipientNipSnapshot: formData.hasRecipient && formData.recipient
+        ? formData.recipient.nip || null
+        : null,
+      recipientAddressSnapshot: recipientAddress || null,
+      number: formData.number,
+      type: formData.type,
+      issueDate: new Date(formData.issueDate),
+      saleDate: new Date(formData.saleDate),
+      paymentDeadline: formData.paymentDeadline
+        ? new Date(formData.paymentDeadline)
+        : null,
+      paymentMethod: formData.paymentMethod,
+      bankAccount: formData.bankAccount || null,
+      splitPayment: formData.splitPayment,
+      reverseCharge: formData.reverseCharge,
+      cashMethod: formData.cashMethod,
+      selfBilling: formData.selfBilling,
+      currency: formData.currency,
+      exchangeRate: formData.exchangeRate || "1.0000",
+      totalNet: totals.totalNet,
+      totalVat: totals.totalVat,
+      totalGross: totals.totalGross,
+      ksefStatus: options.ksefStatus,
+      sendToKsef: formData.sendToKsef,
+      notes: formData.notes || null,
+    };
+
+    // Add type-specific fields
+    if (formData.type === "CORRECTION") {
+      const correctionData = formData as CorrectionInvoiceFormData;
+      invoiceData.originalInvoiceNumber = correctionData.originalInvoice.number;
+      invoiceData.originalInvoiceIssueDate = new Date(
+        correctionData.originalInvoice.issueDate
+      );
+      invoiceData.originalInvoiceKsefNumber =
+        correctionData.originalInvoice.ksefNumber || null;
+      invoiceData.correctionReason = correctionData.correctionReason;
+    } else if (formData.type === "ADVANCE") {
+      const advanceData = formData as AdvanceInvoiceFormData;
+      invoiceData.orderValue = advanceData.orderDetails.orderValue;
+      invoiceData.orderDate = new Date(advanceData.orderDetails.orderDate);
+      invoiceData.orderNumber = advanceData.orderDetails.orderNumber || null;
+      invoiceData.advancePercentage = advanceData.advancePercentage;
+    }
+
+    // Insert invoice
+    const [insertedInvoice] = await db
+      .insert(invoices)
+      .values(invoiceData)
+      .returning({ id: invoices.id });
+
+    const invoiceId = insertedInvoice.id;
+
+    // Save invoice items
+    await this.saveInvoiceItems(invoiceId, formData, totals);
+
+    return invoiceId;
+  }
+
+  /**
+   * Saves invoice items to database
+   */
+  private async saveInvoiceItems(
+    invoiceId: number,
+    formData: InvoiceFormData,
+    totals: InvoiceTotals
+  ): Promise<void> {
+    if (formData.type === "VAT" || formData.type === "ADVANCE") {
+      const items = formData.items as any[];
+      const itemsToInsert = items.map((item) => {
+        const quantity = parseFloat(item.quantity);
+        const netPrice = parseFloat(item.netPrice);
+        const netValue = quantity * netPrice;
+        let vatValue = 0;
+        if (
+          item.vatRate !== "zw" &&
+          item.vatRate !== "np" &&
+          item.vatRate !== "oo"
+        ) {
+          const vatRateNum = parseFloat(item.vatRate);
+          vatValue = (netValue * vatRateNum) / 100;
+        }
+        const grossValue = netValue + vatValue;
+
+        return {
+          invoiceId,
+          name: item.name,
+          quantity: quantity.toString(),
+          unit: item.unit,
+          netPrice: netPrice.toString(),
+          vatRate: item.vatRate,
+          netValue: netValue.toFixed(2),
+          vatValue: vatValue.toFixed(2),
+          grossValue: grossValue.toFixed(2),
+          gtuCode: item.gtuCode || null,
+          pkwiu: item.pkwiu || null,
+          cn: item.cn || null,
+        };
+      });
+
+      await db.insert(invoiceItems).values(itemsToInsert);
+    } else if (formData.type === "CORRECTION") {
+      const items = formData.items as any[];
+      const itemsToInsert = items.map((item) => {
+        // Calculate "after" values
+        const quantityAfter = parseFloat(item.quantityAfter);
+        const netPriceAfter = parseFloat(item.netPriceAfter);
+        const netValue = quantityAfter * netPriceAfter;
+        let vatValue = 0;
+        if (
+          item.vatRateAfter !== "zw" &&
+          item.vatRateAfter !== "np" &&
+          item.vatRateAfter !== "oo"
+        ) {
+          const vatRateNum = parseFloat(item.vatRateAfter);
+          vatValue = (netValue * vatRateNum) / 100;
+        }
+        const grossValue = netValue + vatValue;
+
+        // Calculate "before" values for reference
+        const quantityBefore = parseFloat(item.quantityBefore);
+        const netPriceBefore = parseFloat(item.netPriceBefore);
+
+        return {
+          invoiceId,
+          name: item.name,
+          quantity: quantityAfter.toString(), // Use "after" as primary
+          unit: item.unit,
+          netPrice: netPriceAfter.toString(),
+          vatRate: item.vatRateAfter,
+          netValue: netValue.toFixed(2),
+          vatValue: vatValue.toFixed(2),
+          grossValue: grossValue.toFixed(2),
+          gtuCode: item.gtuCode || null,
+          // Correction-specific fields
+          quantityBefore: quantityBefore.toString(),
+          netPriceBefore: netPriceBefore.toString(),
+          vatRateBefore: item.vatRateBefore,
+          quantityAfter: quantityAfter.toString(),
+          netPriceAfter: netPriceAfter.toString(),
+          vatRateAfter: item.vatRateAfter,
+        };
+      });
+
+      await db.insert(invoiceItems).values(itemsToInsert);
+    }
+  }
+
+  /**
+   * Updates invoice KSeF data (reference numbers, session ID)
+   */
+  private async updateInvoiceKsefData(
+    invoiceId: number,
+    data: {
+      ksefReferenceNumber?: string;
+      ksefSessionId?: string;
+    }
+  ): Promise<void> {
+    await db
+      .update(invoices)
+      .set(data)
+      .where(eq(invoices.id, invoiceId));
+  }
+
+  /**
+   * Updates invoice status and related KSeF data
+   */
+  private async updateInvoiceStatus(
+    invoiceId: number,
+    status: "DRAFT" | "PROCESSING" | "VALID" | "REJECTED",
+    additionalData?: {
+      ksefNumber?: string;
+      ksefUpoRaw?: string;
+      ksefErrors?: string[];
+    }
+  ): Promise<void> {
+    const updateData: any = {
+      ksefStatus: status,
+    };
+
+    if (additionalData) {
+      if (additionalData.ksefNumber) {
+        updateData.ksefNumber = additionalData.ksefNumber;
+      }
+      if (additionalData.ksefUpoRaw) {
+        updateData.ksefUpoRaw = additionalData.ksefUpoRaw;
+      }
+      if (additionalData.ksefErrors) {
+        updateData.ksefErrors = additionalData.ksefErrors;
+      }
+    }
+
+    await db.update(invoices).set(updateData).where(eq(invoices.id, invoiceId));
+  }
 
   /**
    * Gets company data with KSeF credentials

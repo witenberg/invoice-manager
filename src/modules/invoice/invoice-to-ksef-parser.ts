@@ -28,30 +28,8 @@ export function parseInvoiceToKsef(
   formData: InvoiceFormData,
   context: ParserContext
 ): KsefFakturaInput {
-  // Calculate totals
-  let totals: ReturnType<typeof calculateInvoiceTotals>;
-  
-  if (formData.type === "CORRECTION") {
-    // For correction invoices, calculate from "after" values
-    // Convert CorrectionItemFormData to InvoiceItemFormData for calculation
-    const correctionItems: InvoiceItemFormData[] = formData.items.map((item) => {
-      const correctionItem = item as CorrectionItemFormData;
-      return {
-        name: correctionItem.name,
-        quantity: correctionItem.quantityAfter,
-        unit: correctionItem.unit,
-        netPrice: correctionItem.netPriceAfter,
-        vatRate: correctionItem.vatRateAfter as "23" | "8" | "5" | "0" | "zw" | "np" | "oo",
-        gtuCode: correctionItem.gtuCode,
-      };
-    });
-    totals = calculateInvoiceTotals(correctionItems);
-  } else {
-    // For standard invoices (VAT, ADVANCE)
-    // Items are already InvoiceItemFormData
-    const standardItems = formData.items as InvoiceItemFormData[];
-    totals = calculateInvoiceTotals(standardItems);
-  }
+  // Calculate totals - unified function handles all invoice types
+  const totals = calculateInvoiceTotals(formData);
 
   // Format current date/time for DataWytworzenia
   const now = new Date();
