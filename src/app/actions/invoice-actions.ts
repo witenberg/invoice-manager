@@ -3,8 +3,11 @@
 import { z } from "zod";
 import { InvoiceFormData, invoiceFormSchema } from "@/modules/invoice/invoice-schema";
 import { InvoiceService, InvoiceServiceError } from "@/modules/invoice/invoice-service";
-import { requireAuth } from "@/lib/route-guards";
+import { requireAuth, requireCompanyAccess } from "@/lib/route-guards";
 import { revalidatePath } from "next/cache";
+import { db } from "@/db";
+import { invoices } from "@/db/schema";
+import { eq, desc } from "drizzle-orm";
 
 /**
  * Server Action State for Invoice Creation
@@ -123,6 +126,27 @@ export async function createInvoiceAction(
         "Wystąpił nieoczekiwany błąd podczas tworzenia faktury. Spróbuj ponownie.",
     };
   }
+}
+
+/**
+ * Fetches invoices for a specific company
+ * 
+ * @param companyId - ID of the company
+ * @returns Array of invoices sorted by issue date (newest first)
+ */
+export async function getCompanyInvoicesAction(companyId: number) {
+  const session = await requireAuth();
+  
+  // Verify user has access to this company
+  await requireCompanyAccess(companyId);
+
+  const companyInvoices = await db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.companyId, companyId))
+    .orderBy(desc(invoices.issueDate));
+
+  return companyInvoices;
 }
 
 
